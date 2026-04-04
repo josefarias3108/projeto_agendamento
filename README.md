@@ -1,33 +1,90 @@
-# 🏥 CardioBot - Agendamento Inteligente
+# 🏥 Sofia AI - Agente Inteligente de Cardiologia 🫀
 
-Sistema de automação para clínicas de cardiologia integrado com WhatsApp (Evolution API), Supabase e Google Calendar.
+![Python](https://img.shields.io/badge/Python-3.14+-blue.svg)
+![Supabase](https://img.shields.io/badge/Database-Supabase-green.svg)
+![Google Calendar](https://img.shields.io/badge/Sync-Google_Calendar-yellow.svg)
+![Evolution API](https://img.shields.io/badge/API-Evolution_v2-orange.svg)
 
-## 🚀 Funcionalidades Atuais
-
-- **Agendamento via WhatsApp**: Fluxo conversacional inteligente para marcação de consultas.
-- **Sincronização com Google Calendar**:
-    - **Criação Automática**: Novas consultas são enviadas para o calendário em tempo real (job de 2 min).
-    - **Cancelamento Automático**: Consultas marcadas como `cancelled` são removidas do Google Calendar.
-    - **Tratamento de Fuso Horário**: Correção automática para `America/Sao_Paulo` (horário de Brasília).
-- **Lembretes Automáticos**:
-    - Envio de mensagem 24h antes da consulta.
-    - Envio de mensagem 2h antes da consulta.
-    - Notificação via E-mail integrada.
-- **Gestão de Pacientes**: Cadastro completo (Nome, Endereço, E-mail, Convênio) via chat.
-
-## 🛠️ Arquitetura do Sistema
-
-O projeto segue uma estrutura modular para facilitar a manutenção:
-
-- `src/main.py`: Maestro do sistema e orquestrador dos jobs.
-- `src/handlers/`: Lógica dos fluxos de conversa (Agendamento, Cadastro, etc.).
-- `src/database/`: Cliente singleton do Supabase e métodos de CRUD.
-- `src/services/`: Integrações externas (Google Calendar, Evolution API, E-mail).
-- `src/scripts/`: Utilitários para correção de dados e migrações.
-
-## ⚙️ Sincronização de Calendário (Modo Robusto)
-
-O sistema utiliza um **Worker Interno** que roda a cada 2 minutos. Isso garante que, mesmo em contas gratuitas do Supabase (onde o Realtime pode falhar), a agenda do Google esteja sempre espelhada com o banco de dados.
+A **Sofia** é uma assistente virtual avançada projetada para automatizar o atendimento de clínicas cardiológicas através do WhatsApp. Ela gerencia o fluxo completo: desde o cadastro de novos pacientes até o agendamento de consultas com sincronização automática em tempo real.
 
 ---
-*Status do Projeto: Operacional e Sincronizado.*
+
+## 📽️ O que o Robô faz? (Ponta a Ponta)
+
+1.  **Recepção & Triagem**: Identifica se o paciente já é cadastrado através do número de telefone (JID).
+2.  **Cadastro Inteligente**: Se for novo, coleta Nome, Endereço, E-mail e Convênio de forma humanizada.
+3.  **Agendamento Sofia**:
+    -   Consulta horários livres diretamente no banco de dados.
+    -   Interpreta datas naturais (ex: "segunda às 9h", "amanhã cedo").
+    -   Confirma o agendamento no Supabase.
+4.  **Sincronização de Calendário**:
+    -   Cria o evento no **Google Calendar** em até 2 minutos após o agendamento.
+    -   Corrige automaticamente fusos horários (`America/Sao_Paulo`).
+    -   Remove eventos do calendário se a consulta for cancelada no bot ou no banco.
+5.  **Lembretes Proativos**: Envia notificações automáticas (WhatsApp + E-mail) 24h e 2h antes de cada consulta.
+6.  **Gestão de Inatividade**: Detecta se o usuário parou de responder e encerra a sessão educadamente para liberar o fluxo.
+
+---
+
+## 📏 Regras de Arquitetura Modular
+
+Este projeto segue rigorosamente o padrão de organização para garantir escalabilidade e limpeza:
+
+### 🚀 Princípio Fundamental: `main.py` como Maestro
+O arquivo principal apenas orquestra o fluxo, gerencia sessões e roteia mensagens. **Zero lógica de negócio pesada ou SQL aqui.**
+
+### 📂 Estrutura de Pastas
+*   `src/config/`: Textos centrais (`messages.py`) e variáveis globais (`settings.py`).
+*   `src/handlers/`: Cérebros dos fluxos (ex: `scheduling.py`, `onboarding.py`). Cada arquivo cuida de um processo específico.
+*   `src/database/`: Singleton `client.py` com métodos CRUD. **Proibido SQL direto nos handlers.**
+*   `src/services/`: Encapsula APIs externas (Evolution API, Google Calendar, E-mails).
+*   `src/agents/`: Inteligência Artificial (LangGraph e Classificadores Groq/OpenAI).
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Linguagem**: Python 3.14+
+- **Database**: Supabase (PostgreSQL)
+- **Mensageria**: Evolution API v2 (WhatsApp)
+- **Calendário**: Google Calendar API v3
+- **IA/NLP**: LangGraph, Groq, OpenAI
+- **Agendamento Interno**: APScheduler (verificação de inatividade e sync de calendário)
+
+---
+
+## 🚀 Como Rodar o Projeto
+
+### Pré-requisitos
+- Docker & Docker Compose (Recomendado)
+- Credenciais do Google Cloud (`credentials.json`)
+- API Key da Evolution API
+
+### Configuração
+1.  Crie um arquivo `.env` na raiz conforme o modelo abaixo:
+    ```env
+    # Supabase
+    SUPABASE_URL=https://...
+    SUPABASE_API_KEY=...
+    
+    # Evolution API
+    EVOLUTION_INSTANCE_URL=...
+    EVOLUTION_API_KEY=...
+    
+    # AI Keys
+    GROQ_API_KEY=...
+    OPENAI_API_KEY=...
+    ```
+2.  Inicie os serviços:
+    ```bash
+    docker-compose up -d
+    ```
+
+### Monitoramento
+O robô agora conta com um **Worker de Sincronização Robusto**:
+- Ele monitora a tabela `appointments` a cada 2 minutos.
+- Garante a sincronização mesmo que os Webhooks/Realtime falhem.
+
+---
+*Documentação atualizada em: 04/04/2026*
+*Responsável: Antigravity AI*
