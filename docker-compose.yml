@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: cardio_agent
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+    environment:
+      - PYTHONPATH=/app/src
+    env_file:
+      - .env
+    restart: unless-stopped
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload

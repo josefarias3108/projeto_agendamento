@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+supabase
+langchain
+langgraph
+langchain-groq
+python-dotenv
+pydantic
+httpx
+apscheduler
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
