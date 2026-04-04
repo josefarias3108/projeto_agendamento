@@ -17,12 +17,13 @@ MSG_WELCOME_BACK = (
     "Como posso te ajudar hoje?\n\n"
     "1️⃣ Agendar consulta\n"
     "2️⃣ Remarcar consulta\n"
-    "3️⃣ Consultas agendadas\n"
-    "4️⃣ Endereço do consultório\n"
-    "5️⃣ Telefone do consultório\n"
-    "6️⃣ Enviar exames\n"
-    "7️⃣ Atualizar cadastro\n\n"
-    "8️⃣ Encerrar atendimento"
+    "3️⃣ Cancelar consulta\n"
+    "4️⃣ Consultas agendadas\n"
+    "5️⃣ Endereço do consultório\n"
+    "6️⃣ Telefone do consultório\n"
+    "7️⃣ Enviar exames\n"
+    "8️⃣ Atualizar cadastro\n\n"
+    "9️⃣ Encerrar atendimento"
 )
 
 MSG_ASK_CPF = (
@@ -128,12 +129,43 @@ MSG_MENU = (
     "Como posso te ajudar hoje?\n\n"
     "1️⃣ Agendar consulta\n"
     "2️⃣ Remarcar consulta\n"
-    "3️⃣ Consultas agendadas\n"
-    "4️⃣ Endereço do consultório\n"
-    "5️⃣ Telefone do consultório\n"
-    "6️⃣ Enviar exames\n"
-    "7️⃣ Atualizar cadastro\n\n"
-    "8️⃣ Encerrar atendimento"
+    "3️⃣ Cancelar consulta\n"
+    "4️⃣ Consultas agendadas\n"
+    "5️⃣ Endereço do consultório\n"
+    "6️⃣ Telefone do consultório\n"
+    "7️⃣ Enviar exames\n"
+    "8️⃣ Atualizar cadastro\n\n"
+    "9️⃣ Encerrar atendimento"
+)
+
+# ── Cancelar Consulta ────────────────────────────────────────
+
+MSG_CANCEL_LIST_HEADER = (
+    "🗓️ *Suas consultas agendadas:*\n\n"
+    "{appointments_list}\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "👉 Digite o número de cada consulta que deseja cancelar.\n"
+    "Pode cancelar várias ao mesmo tempo!\n"
+    "*Exemplo:* _1_ ou _1, 2, 3_\n\n"
+    "0️⃣ Voltar ao menu principal sem cancelar"
+)
+
+MSG_CANCEL_CONFIRM = (
+    "Você deseja cancelar a{plural} seguinte{plural} consulta{plural}?\n\n"
+    "{appointments_list}\n"
+    "1️⃣ Sim, cancelar\n"
+    "2️⃣ Não, voltar"
+)
+
+MSG_CANCEL_SUCCESS = (
+    "✅ {count} consulta{plural} cancelada{plural} com sucesso!\n\n"
+    "Se quiser remarcar ou agendar uma nova consulta, estou aqui. 😊"
+)
+
+MSG_CANCEL_NONE = (
+    "Você não possui consultas agendadas para cancelar. 😊\n\n"
+    "1️⃣ Agendar uma consulta\n"
+    "2️⃣ Voltar ao menu principal"
 )
 
 MSG_UPDATE_PHONE_ASK = (

@@ -226,8 +226,8 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
         elif step in ["menu", "menu_post_register", "waiting_for_exams", "update_profile", "info_appointments", "info_address", "info_phone"]:
             await handle_menu(remote_jid, state, text, message_data)
         
-        # Agendamento
-        elif step == "scheduling":
+        # Agendamento & Cancelamento
+        elif step == "scheduling" or step.startswith("cancel_"):
             await handle_scheduling(remote_jid, state, text)
             
         else:

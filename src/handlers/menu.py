@@ -26,22 +26,25 @@ async def handle_menu(remote_jid, state, text, message_data=None):
             from src.handlers.scheduling import handle_reschedule
             await handle_reschedule(remote_jid, state)
         elif num_text == "3":
+            from src.handlers.scheduling import start_cancellation
+            await start_cancellation(remote_jid, state)
+        elif num_text == "4":
             state["conversation_step"] = "info_appointments"
             await _show_appointments(remote_jid, state)
-        elif num_text == "4":
+        elif num_text == "5":
             state["conversation_step"] = "info_address"
             await send(remote_jid, MSG_OFFICE_ADDRESS)
-        elif num_text == "5":
+        elif num_text == "6":
             state["conversation_step"] = "info_phone"
             await send(remote_jid, MSG_OFFICE_PHONE)
-        elif num_text == "6":
+        elif num_text == "7":
             state["conversation_step"] = "waiting_for_exams"
             await send(remote_jid, MSG_WAITING_EXAMS)
-        elif num_text == "7":
+        elif num_text == "8":
             state["intent"] = "update"
             state["conversation_step"] = "update_profile"
             await send(remote_jid, MSG_PROFILE_UPDATE_MENU)
-        elif num_text == "8":
+        elif num_text == "9":
             await _terminate_session(remote_jid)
         else:
             state["loop_count"] = state.get("loop_count", 0) + 1
