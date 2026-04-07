@@ -32,6 +32,8 @@ class AgentState(TypedDict):
     doctor_id: Optional[str]
     appointment_time: Optional[str]
     missing_fields: list
+    pending_confirmation_appt_id: Optional[str] # ID da consulta aguardando confirmação
+    pending_confirmation_appt_time: Optional[str] # Texto do horário para referenciar na mensagem
 
     # Anti-loop
     loop_count: int

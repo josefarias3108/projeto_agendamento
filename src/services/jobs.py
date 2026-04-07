@@ -123,13 +123,15 @@ async def send_reminders_job():
         return
 
     now = datetime.now(timezone.utc)
+    from src.services.sessions import active_sessions, create_initial_state
+    from src.config.messages import MSG_REMINDER_CONFIRM_PROMPT
 
     # ── LEMBRETE 24H ─────────────────────────────────────────
     in_24h_start = now + timedelta(hours=23)
     in_24h_end = now + timedelta(hours=25)
 
     res_24h = (db_service.client.table("appointments")
-               .select("id, start_time, patients(name, phone, remote_jid, email)")
+               .select("id, start_time, patients(id, name, phone, remote_jid, email, cpf, cep, address, insurance, birth_date)")
                .eq("status", "scheduled")
                .gte("start_time", in_24h_start.isoformat())
                .lte("start_time", in_24h_end.isoformat())
@@ -155,9 +157,18 @@ async def send_reminders_job():
                 f"📄 *Documentos para trazer:*\n"
                 f"• Carteirinha do plano de saúde ({patient.get('insurance', 'Plano')})\n"
                 f"• Documento de identidade (RG, CNH ou outro)\n\n"
-                "Até lá! 💙"
+                "Até lá! 💙\n\n"
+                f"{MSG_REMINDER_CONFIRM_PROMPT}"
             )
             await evo_service.send_text_message(phone, msg_wa)
+            
+            # Atualiza estado da sessão
+            if phone not in active_sessions:
+                active_sessions[phone] = create_initial_state(phone, patient)
+            active_sessions[phone]["conversation_step"] = "waiting_reminder_confirmation"
+            active_sessions[phone]["pending_confirmation_appt_id"] = appt["id"]
+            active_sessions[phone]["pending_confirmation_appt_time"] = time_str
+            active_sessions[phone]["last_message_at"] = datetime.now(timezone.utc)
 
         # E-mail
         if email:
@@ -172,7 +183,7 @@ async def send_reminders_job():
     in_2h_end = now + timedelta(hours=2, minutes=30)
 
     res_2h = (db_service.client.table("appointments")
-              .select("id, start_time, patients(name, phone, remote_jid, email)")
+              .select("id, start_time, patients(id, name, phone, remote_jid, email, cpf, cep, address, insurance, birth_date)")
               .eq("status", "scheduled")
               .gte("start_time", in_2h_start.isoformat())
               .lte("start_time", in_2h_end.isoformat())
@@ -198,9 +209,18 @@ async def send_reminders_job():
                 f"📄 *Não esqueça de trazer:*\n"
                 f"• Carteirinha do plano de saúde ({patient.get('insurance', 'Plano')})\n"
                 f"• Documento de identidade (RG, CNH ou outro)\n\n"
-                "Nos vemos em breve! 💙"
+                "Nos vemos em breve! 💙\n\n"
+                f"{MSG_REMINDER_CONFIRM_PROMPT}"
             )
             await evo_service.send_text_message(phone, msg_wa)
+            
+            # Atualiza estado da sessão
+            if phone not in active_sessions:
+                active_sessions[phone] = create_initial_state(phone, patient)
+            active_sessions[phone]["conversation_step"] = "waiting_reminder_confirmation"
+            active_sessions[phone]["pending_confirmation_appt_id"] = appt["id"]
+            active_sessions[phone]["pending_confirmation_appt_time"] = time_str
+            active_sessions[phone]["last_message_at"] = datetime.now(timezone.utc)
 
         # E-mail
         if email:

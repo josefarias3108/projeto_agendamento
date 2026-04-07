@@ -384,6 +384,25 @@ class SupabaseService:
                .execute())
         return res.data or []
 
+    def get_appointment_by_patient_and_day(self, patient_id: str, target_iso: str):
+        """Verifica se o paciente já tem consulta agendada naquele dia específico."""
+        if not self.client:
+            return None
+        
+        # Converte ISO string (YYYY-MM-DD) ou (YYYY-MM-DDTHH...) para os limites do dia
+        dt_obj = datetime.fromisoformat(target_iso.split("T")[0])
+        start_of_day = dt_obj.strftime("%Y-%m-%dT00:00:00Z")
+        end_of_day = dt_obj.strftime("%Y-%m-%dT23:59:59Z")
+        
+        res = (self.client.table("appointments")
+               .select("id, start_time")
+               .eq("patient_id", patient_id)
+               .eq("status", "scheduled")
+               .gte("start_time", start_of_day)
+               .lte("start_time", end_of_day)
+               .execute())
+        return res.data[0] if res.data else None
+
     def cancel_appointment(self, appointment_id: str):
         """
         Atualiza status para 'cancelled' no Supabase.
@@ -392,9 +411,13 @@ class SupabaseService:
         """
         if not self.client:
             return False
-        self.client.table("appointments").update({"status": "cancelled"}).eq("id", appointment_id).execute()
-        logger.info(f"Agendamento [{appointment_id}] cancelado no Supabase.")
-        return True
+        try:
+            self.client.table("appointments").update({"status": "cancelled"}).eq("id", appointment_id).execute()
+            logger.info(f"Agendamento [{appointment_id}] cancelado no Supabase.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao cancelar agendamento [{appointment_id}]: {e}")
+            return False
 
     # ──────────────────── EXAMES ────────────────────
 

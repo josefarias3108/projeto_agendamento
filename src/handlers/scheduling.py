@@ -141,6 +141,23 @@ async def handle_scheduling(remote_jid, state, text):
             return
 
     # ── AGENDAMENTO ─────────────────────────────────────────────────
+    if step == "double_booking_blocked":
+        if num_text == "1" or "remarcar" in txt_lower:
+            await handle_reschedule(remote_jid, state)
+            return
+        elif num_text == "2" or "menu" in txt_lower:
+            state["conversation_step"] = "menu"
+            await send(remote_jid, MSG_MENU.format(name=state.get("name", "paciente")))
+            return
+        elif num_text == "3" or "encerrar" in txt_lower:
+            from src.config.messages import MSG_ENCERRAR
+            if remote_jid in active_sessions: del active_sessions[remote_jid]
+            await send(remote_jid, MSG_ENCERRAR)
+            return
+        else:
+            await send(remote_jid, "🤔 Por favor, responda com *1* (Remarcar), *2* (Menu) ou *3* (Encerrar).")
+            return
+
     # 1. SELEÇÃO DE DATA
     if step == "scheduling" and state.get("date_options") and num_text.isdigit():
         idx = int(num_text) - 1
@@ -220,6 +237,16 @@ async def _finalize_booking(remote_jid, state, chosen_date, chosen_hour):
         doc = db_service.get_doctor_by_name("Dr. João")
         pid = state.get("patient_id")
         
+        # --- NOVO: Verifica se já tem consulta nesse dia ---
+        existing = db_service.get_appointment_by_patient_and_day(pid, start.isoformat())
+        if existing:
+            state["conversation_step"] = "double_booking_blocked"
+            date_str = start.strftime('%d/%m/%Y')
+            msg = MSG_ALREADY_HAS_APPOINTMENT.format(name=state.get("name", "Paciente"), date=date_str)
+            await send(remote_jid, msg)
+            return
+        # ---------------------------------------------------
+
         res = db_service.book_appointment(pid, doc["id"], start.isoformat(), end.isoformat())
         
         if res.get("success"):

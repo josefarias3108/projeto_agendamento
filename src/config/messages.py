@@ -138,6 +138,36 @@ MSG_MENU = (
     "9️⃣ Encerrar atendimento"
 )
 
+# ── Novas Mensagens: Restrição de Agendamento e Confirmação ──
+MSG_ALREADY_HAS_APPOINTMENT = (
+    "Olá, {name}! Identificamos que você já possui um horário agendado para o dia {date}.\n\n"
+    "Para esse dia, não é possível marcar mais de um horário. Se quiser alterar, escolha uma das opções abaixo:\n\n"
+    "1️⃣ Remarcar consulta\n"
+    "2️⃣ Voltar ao menu principal\n"
+    "3️⃣ Encerrar atendimento"
+)
+
+MSG_REMINDER_CONFIRM_PROMPT = (
+    "Confirma a sua presença?\n\n"
+    "1️⃣ Sim\n"
+    "2️⃣ Não"
+)
+
+MSG_REMINDER_CONFIRMED = (
+    "Ótimo, {name}! 😊\n"
+    "Sua presença na consulta com o Dr. João está confirmada para {time_str}.\n"
+    "Ficamos te aguardando! 💙\n"
+    "Se precisar de algo, é só nos chamar."
+)
+
+MSG_REMINDER_CANCELLED = (
+    "Tudo bem, {name}! 😊\n"
+    "Entendemos que você não poderá comparecer à consulta.\n"
+    "Deseja reagendar para outro horário?\n"
+    "1️⃣ Sim, reagendar\n"
+    "2️⃣ Não, obrigado"
+)
+
 # ── Cancelar Consulta ────────────────────────────────────────
 
 MSG_CANCEL_LIST_HEADER = (

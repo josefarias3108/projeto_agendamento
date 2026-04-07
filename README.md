@@ -41,7 +41,9 @@ A **Sofia** é uma agente de atendimento conversacional integrada ao WhatsApp vi
 |---|---|
 | **Cadastro Inteligente** | Coleta Nome, CPF (validado matematicamente), Data de Nascimento, CEP (lookup automático via ViaCEP), Endereço e Convênio |
 | **Agendamento Conversacional** | Busca os próximos horários livres no banco, apresenta menus numerados e confirma o agendamento |
-| **Cancelamento Múltiplo** | **(Novo)** Permite ao paciente selecionar e cancelar uma ou mais consultas simultaneamente via menu numerado |
+| **Limite de 1 Consulta/Dia** | **(Novo)** Impede que o mesmo paciente marque mais de um horário na mesma data, sugerindo remarcação |
+| **Confirmação de Lembrete** | **(Novo)** Lembretes (24h/2h) agora solicitam confirmação (Sim/Não). Negativa cancela automaticamente e sugere reagendamento |
+| **Cancelamento Múltiplo** | Permite ao paciente selecionar e cancelar uma ou mais consultas simultaneamente via menu numerado |
 | **Remarcação** | Cancela a consulta existente e abre novo fluxo de agendamento |
 | **Sincronização Google Calendar** | Worker interno cria/deleta eventos automaticamente a cada 2 minutos sem depender de Realtime/Webhooks |
 | **Lembretes Automáticos** | Notifica o paciente 24h e 2h antes da consulta via WhatsApp e E-mail |

@@ -34,6 +34,8 @@ def create_initial_state(remote_jid, patient):
         doctor_id=None,
         appointment_time=None,
         missing_fields=[],
+        pending_confirmation_appt_id=None,
+        pending_confirmation_appt_time=None,
         loop_count=0,
         last_message_at=datetime.now(timezone.utc),
         inactivity_prompt_sent=False

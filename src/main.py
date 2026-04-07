@@ -198,6 +198,47 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
             await send(remote_jid, MSG_ENCERRAR)
             return
 
+    # 3.5 Tratamento de Confirmação de Lembrete
+    if step == "waiting_reminder_confirmation":
+        if num_text == "1" or txt_lower in SIM_OPTIONS:
+            from src.config.messages import MSG_REMINDER_CONFIRMED, MSG_ENCERRAR
+            time_str = state.get("pending_confirmation_appt_time", "hoje/amanhã")
+            name = state.get("name", "Paciente")
+            await send(remote_jid, MSG_REMINDER_CONFIRMED.format(name=name, time_str=time_str))
+            
+            # Encerra o atendimento
+            if remote_jid in active_sessions: del active_sessions[remote_jid]
+            return
+        elif num_text == "2" or txt_lower in NAO_OPTIONS:
+            appt_id = state.get("pending_confirmation_appt_id")
+            if appt_id:
+                db_service.cancel_appointment(appt_id)
+            state["conversation_step"] = "waiting_reminder_reschedule"
+            state["pending_confirmation_appt_id"] = None
+            
+            from src.config.messages import MSG_REMINDER_CANCELLED
+            name = state.get("name", "Paciente")
+            await send(remote_jid, MSG_REMINDER_CANCELLED.format(name=name))
+            return
+        else:
+            await send(remote_jid, "🤔 Por favor, responda com *1* (Sim) ou *2* (Não).")
+            return
+            
+    if step == "waiting_reminder_reschedule":
+        if num_text == "1" or txt_lower in SIM_OPTIONS:
+            from src.handlers.scheduling import start_scheduling
+            await send(remote_jid, "Entendido! Vamos escolher uma nova data para sua consulta. 📅")
+            await start_scheduling(remote_jid, state)
+            return
+        elif num_text == "2" or txt_lower in NAO_OPTIONS:
+            from src.config.messages import MSG_ENCERRAR
+            if remote_jid in active_sessions: del active_sessions[remote_jid]
+            await send(remote_jid, MSG_ENCERRAR)
+            return
+        else:
+            await send(remote_jid, "🤔 Por favor, responda com *1* (Sim, reagendar) ou *2* (Não, obrigado).")
+            return
+
     # 4. Verificação de Contexto (Hybrid LLM + Deterministic)
     if len(text) > 3 and step not in ["waiting_for_exams", "scheduling", "register_name"]:
         context_status = check_out_of_context(text)
