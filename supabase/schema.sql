@@ -27,6 +27,7 @@ CREATE TABLE public.patients (
     cpf TEXT,
     insurance TEXT,                          -- Ex: "Unimed", "Bradesco Saúde", "Particular"
     insurance_category TEXT,                 -- Ex: "Unimed Nacional", "Bradesco Top Executivo"
+    birth_date DATE,                         -- Data de nascimento do paciente
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
 );
@@ -87,6 +88,7 @@ ALTER TABLE public.patients
   ADD COLUMN IF NOT EXISTS email TEXT UNIQUE,
   ADD COLUMN IF NOT EXISTS address TEXT,
   ADD COLUMN IF NOT EXISTS insurance_category TEXT,
+  ADD COLUMN IF NOT EXISTS birth_date DATE,
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now());
 
 UPDATE public.doctors SET appointment_duration_minutes = 60 WHERE name ILIKE '%João%';

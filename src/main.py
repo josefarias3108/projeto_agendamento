@@ -39,12 +39,16 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from src.services.jobs import check_inactivity_job
+    from src.services.jobs import check_inactivity_job, check_proactive_alerts_job, daily_admin_agenda_job, supabase_keepalive_job, force_refresh_google_token_job
     scheduler.add_job(send_reminders_job, "interval", minutes=60)
     scheduler.add_job(check_inactivity_job, "interval", seconds=30, args=[active_sessions])
     scheduler.add_job(sync_calendar_job, "interval", minutes=2, id="google_calendar_sync")
+    scheduler.add_job(check_proactive_alerts_job, "interval", minutes=5)
+    scheduler.add_job(daily_admin_agenda_job, "interval", minutes=30)
+    scheduler.add_job(force_refresh_google_token_job, "interval", hours=6)
+    scheduler.add_job(supabase_keepalive_job, "cron", hour=3, minute=0, id="supabase_keepalive")
     scheduler.start()
-    logger.info("Scheduler iniciado (lembretes, inatividade, sync Google Calendar).")
+    logger.info("Scheduler iniciado (lembretes, inatividade, sync Google Calendar, alertas proativos, agenda PO, keepalive).")
     
     # Inicia o listener Supabase Realtime → Google Calendar (sem precisar de URL pública)
     realtime_task = asyncio.create_task(start_realtime_listener())
@@ -139,6 +143,48 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
     text = text.strip()
     txt_lower = text.lower()
     
+    # 0. Interceptadores de Comandos Administrativos (PRIORIDADE TOTAL)
+    # Se for comando administrativo, cria a sessão se não existir e pula onboarding
+    if txt_lower == "/acessar" or (remote_jid in active_sessions and "admin_step" in active_sessions[remote_jid]):
+        if remote_jid not in active_sessions:
+            active_sessions[remote_jid] = create_initial_state(remote_jid, None)
+        state = active_sessions[remote_jid]
+        
+        user_phone = remote_jid.split("@")[0]
+        if txt_lower == "/acessar" and user_phone != "5521995430173":
+            await send(remote_jid, "❌ Acesso Negado: Este comando é restrito ao administrador do sistema.")
+            return
+        if txt_lower == "/acessar" and "admin_step" not in state:
+             state["admin_step"] = "start"
+             
+        from src.handlers.admin import handle_admin
+        await handle_admin(remote_jid, state, text)
+        return
+
+    is_clinic_cmd = txt_lower in ("/consultorio", "/consultório")
+    if is_clinic_cmd or (remote_jid in active_sessions and "clinic_step" in active_sessions[remote_jid]):
+        if remote_jid not in active_sessions:
+            active_sessions[remote_jid] = create_initial_state(remote_jid, None)
+        state = active_sessions[remote_jid]
+
+        admin_data = db_service.check_is_admin(remote_jid)
+        if not admin_data:
+             await send(remote_jid, "❌ Acesso Negado: Seu número não possui autorização para este menu.")
+             return
+        if is_clinic_cmd and "clinic_step" not in state:
+             state["clinic_step"] = "menu"
+             
+        from src.handlers.clinic import handle_clinic
+        try:
+            await handle_clinic(remote_jid, state, text)
+        except Exception as e:
+            logger.error(f"Erro crítico em handle_clinic: {e}", exc_info=True)
+            await send(remote_jid, "Desculpe, ocorreu um erro interno no sistema administrativo. Voltando ao menu principal.")
+            state.pop("clinic_step", None)
+            from src.config.messages import MSG_CLINIC_MENU
+            await send(remote_jid, MSG_CLINIC_MENU)
+        return
+
     # Extração robusta do número (evita erros de desempacotamento de comandos)
     import re
     match = re.search(r'\d+', text)
@@ -179,8 +225,8 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
     state["inactivity_prompt_sent"] = False # Reseta sinalizador de inatividade
     step = state["conversation_step"]
 
-    # 2. Comando Global: Encerrar
-    if txt_lower == "encerrar":
+    # 2. Comando Global: Encerrar (Mais robusto para erros de digitação comuns)
+    if "encerrar" in txt_lower or "emcerrar" in txt_lower or "cancelar" in txt_lower:
         if remote_jid in active_sessions: del active_sessions[remote_jid]
         await send(remote_jid, MSG_ENCERRAR)
         return
@@ -201,7 +247,6 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
     # 3.5 Tratamento de Confirmação de Lembrete
     if step == "waiting_reminder_confirmation":
         if num_text == "1" or txt_lower in SIM_OPTIONS:
-            from src.config.messages import MSG_REMINDER_CONFIRMED, MSG_ENCERRAR
             time_str = state.get("pending_confirmation_appt_time", "hoje/amanhã")
             name = state.get("name", "Paciente")
             await send(remote_jid, MSG_REMINDER_CONFIRMED.format(name=name, time_str=time_str))
@@ -231,7 +276,6 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
             await start_scheduling(remote_jid, state)
             return
         elif num_text == "2" or txt_lower in NAO_OPTIONS:
-            from src.config.messages import MSG_ENCERRAR
             if remote_jid in active_sessions: del active_sessions[remote_jid]
             await send(remote_jid, MSG_ENCERRAR)
             return
@@ -239,21 +283,48 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
             await send(remote_jid, "🤔 Por favor, responda com *1* (Sim, reagendar) ou *2* (Não, obrigado).")
             return
 
-    # 4. Verificação de Contexto (Hybrid LLM + Deterministic)
-    if len(text) > 3 and step not in ["waiting_for_exams", "scheduling", "register_name"]:
-        context_status = check_out_of_context(text)
+    # 3.7 Tratamento de Resposta a Cancelamento Proativo
+    if step == "waiting_proactive_cancel_response":
+        if num_text == "1" or txt_lower in SIM_OPTIONS:
+            from src.handlers.scheduling import start_scheduling
+            await send(remote_jid, "Certo! Vamos escolher um novo horário para você. 📅")
+            await start_scheduling(remote_jid, state)
+            return
+        elif num_text == "2" or txt_lower in NAO_OPTIONS:
+            await send(remote_jid, "Entendido. Se precisar de algo, nosso telefone é (21) 99543-0173. 📞")
+            if remote_jid in active_sessions: del active_sessions[remote_jid]
+            await send(remote_jid, MSG_ENCERRAR)
+            return
+        else:
+            await send(remote_jid, "🤔 Por favor, responda com *1* (Reagendar) ou *2* (Falar com a clínica).")
+            return
+
+    # 3.6 Tratamento de Fora de Contexto
+    if step == "waiting_out_of_context_response":
+        if num_text == "1" or "voltar" in txt_lower:
+            state["conversation_step"] = "menu"
+            await send(remote_jid, "Entendido! Vamos voltar ao atendimento do consultório.")
+            await send(remote_jid, MSG_MENU.format(name=state.get("name", "paciente")))
+            return
+        elif num_text == "2" or "encerrar" in txt_lower or "não" in txt_lower:
+            if remote_jid in active_sessions: del active_sessions[remote_jid]
+            await send(remote_jid, MSG_ENCERRAR)
+            return
+        else:
+            await send(remote_jid, "🤔 Por favor, escolha *1* para voltar ao atendimento ou *2* para encerrar.")
+            return
+
+    # 4. Verificação de Contexto (IA)
+    if len(text) > 3 and step not in ["waiting_for_exams", "scheduling"] and not step.startswith("register_"):
+        context_status = await check_out_of_context(text)
         if context_status:
-            # Se o usuário escolher "1" em um menu de fora de contexto, forçamos o retorno ao menu.
             from src.config.messages import (MSG_OUT_OF_CONTEXT_OFFENSIVE, MSG_OUT_OF_CONTEXT_DEFAULT)
-            if num_text == "1":
-                 state["conversation_step"] = "menu"
-                 await send(remote_jid, "Entendido! Vamos voltar ao atendimento do consultório.")
-                 await send(remote_jid, MSG_MENU.format(name=state.get("name", "paciente")))
-                 return
-                 
+            state["conversation_step"] = "waiting_out_of_context_response"
+            
             if context_status == "offensive":
                 await send(remote_jid, MSG_OUT_OF_CONTEXT_OFFENSIVE)
-            elif context_status == "off_topic":
+            else:
+                # O menu de fora de contexto já contém as opções 1 e 2 no texto padrão do messages.py
                 await send(remote_jid, MSG_OUT_OF_CONTEXT_DEFAULT)
             return
 
@@ -275,6 +346,7 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
             # FALLBACK GLOBAL: Se caiu aqui, o passo é desconhecido ou não mapeado
             logger.warning(f"Step não mapeado: {step}. Redirecionando para menu.")
             state["conversation_step"] = "menu"
+            from src.config.messages import MSG_MENU
             await send(remote_jid, MSG_MENU.format(name=state.get("name", "paciente")))
 
     except Exception as e:

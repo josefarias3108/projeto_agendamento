@@ -14,8 +14,8 @@ load_dotenv()
 logger = logging.getLogger("CardioAgent")
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-# Mixtral é rápido e costuma ter bons limites no Groq
-MODEL_NAME = "mixtral-8x7b-32768" 
+# Llama 3.3 é o novo padrão estável e rápido no Groq
+MODEL_NAME = "llama-3.3-70b-versatile" 
 
 if not GROQ_API_KEY or GROQ_API_KEY == "sua_groq_api_key_aqui":
     llm = None

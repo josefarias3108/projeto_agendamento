@@ -113,6 +113,12 @@ class SupabaseService:
         res = self.client.table("doctors").select("*").ilike("name", f"%{name}%").execute()
         return res.data[0] if res.data else None
 
+    def get_patient(self, patient_id: str) -> dict | None:
+        if not self.client:
+            return None
+        res = self.client.table("patients").select("*").eq("id", patient_id).execute()
+        return res.data[0] if res.data else None
+
     # ──────────────────── DISPONIBILIDADE ────────────────────
 
     def check_availability(self, date_str: str) -> str:
@@ -376,7 +382,7 @@ class SupabaseService:
             return []
         now = datetime.utcnow().isoformat()
         res = (self.client.table("appointments")
-               .select("id, start_time, end_time, status, doctors(name)")
+               .select("id, start_time, end_time, status, patient_id, doctors(name)")
                .eq("patient_id", patient_id)
                .eq("status", "scheduled")
                .gte("start_time", now)
@@ -440,21 +446,186 @@ class SupabaseService:
         res = self.client.table("patient_exams").select("*").eq("patient_id", patient_id).order("created_at", desc=True).execute()
         return res.data or []
 
-    # ──────────────────── HELPERS ────────────────────
-
-    def normalize_insurance(self, user_input: str) -> tuple[str | None, str]:
-        """
-        Retorna (nome_normalizado, mensagem).
-        Se não encontrado, retorna (None, mensagem de erro).
-        """
-        text = user_input.lower().strip()
-        for key, name in TOP5_CONVENIOS.items():
-            if key in text:
-                return name, f"Convênio identificado: *{name}*. ✅"
         return None, (
             "Infelizmente não localizei esse convênio em nossa lista. "
             "Atendemos pelos seguintes planos: Bradesco Saúde, Amil, SulAmérica, Unimed e Porto Seguro. "
             "Você gostaria de agendar como *Particular* (R$ 450,00)?")
+
+    # ──────────────────── ADMINS / CLINIC ────────────────────
+
+    def check_is_admin(self, remote_jid: str) -> dict | None:
+        """Verifica se um número tem acesso administrativo e retorna o cargo."""
+        if not self.client: return None
+        # Pega apenas os números antes do @ (ex: 552199... @s.whatsapp.net -> 552199...)
+        phone_number = remote_jid.split("@")[0]
+        res = self.client.table("authorized_admins").select("role, name").eq("phone", phone_number).execute()
+        return res.data[0] if res.data else None
+
+    def add_admin(self, phone: str, role: str = "admin", name: str = "Secretária/Admin"):
+        if not self.client: return False
+        try:
+            self.client.table("authorized_admins").insert({"phone": phone, "role": role, "name": name}).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao adicionar admin: {e}")
+            return False
+
+    def remove_admin(self, phone: str):
+        if not self.client: return False
+        try:
+            self.client.table("authorized_admins").delete().eq("phone", phone).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao remover admin: {e}")
+            return False
+
+    def list_admins(self):
+        if not self.client: return []
+        res = self.client.table("authorized_admins").select("phone, name, role").execute()
+        return res.data or []
+
+    # ──────────────────── KANBAN / LISTAGEM ────────────────────
+
+    def get_upcoming_appointment_dates(self, limit=7, offset=0, max_days_ahead=60):
+        if not self.client: return []
+        hoje = date.today()
+        # No supabase postgrest, não temos DISTICT DATE nativo facilmente via SDK sem RPC.
+        # Vamos buscar os appts até 60 dias pra frente, e em Python tiramos as datas únicas.
+        max_date = hoje + timedelta(days=max_days_ahead)
+        res = (self.client.table("appointments")
+               .select("start_time")
+               .gte("start_time", hoje.isoformat())
+               .lte("start_time", max_date.isoformat())
+               .neq("status", "cancelled")
+               .order("start_time")
+               .execute())
+        
+        dates_set = set()
+        unique_dates = []
+        for a in (res.data or []):
+            try:
+                d = datetime.fromisoformat(a["start_time"].replace("Z", "+00:00")).date()
+                if d >= hoje and d not in dates_set:
+                    dates_set.add(d)
+                    unique_dates.append(d)
+            except: pass
+        
+        unique_dates.sort()
+        
+        # Paginação
+        return unique_dates[offset:offset+limit], len(unique_dates)
+
+    def get_appointments_by_date(self, target_date: date):
+        if not self.client: return []
+        start_of_day = datetime.combine(target_date, datetime.min.time()).isoformat() + "Z"
+        end_of_day = datetime.combine(target_date, datetime.max.time()).isoformat() + "Z"
+        
+        res = (self.client.table("appointments")
+               .select("id, start_time, status, patient_id, patients(name, phone)")
+               .gte("start_time", start_of_day)
+               .lte("start_time", end_of_day)
+               .neq("status", "cancelled")
+               .order("start_time")
+               .execute())
+        return res.data or []
+
+    def get_weekly_schedule(self):
+        if not self.client: return []
+        hoje = date.today()
+        # Traz próximos 5 dias da semana (excluindo FDS se quiser, mas aqui traremos os próximos 7 dias por segurança)
+        max_date = hoje + timedelta(days=7)
+        res = (self.client.table("appointments")
+               .select("id, start_time, end_time, status, patients(name)")
+               .gte("start_time", hoje.isoformat())
+               .lte("start_time", max_date.isoformat())
+               .neq("status", "cancelled")
+               .order("start_time")
+               .execute())
+        return res.data or []
+
+    # ──────────────────── STATUS ────────────────────
+
+    def get_todays_appointments(self, offset_days=0):
+        """Lista todas consultas para um dia relativo a hoje."""
+        if not self.client: return []
+        target_date = date.today() + timedelta(days=offset_days)
+        start_of_day = datetime.combine(target_date, datetime.min.time()).isoformat() + "Z"
+        end_of_day = datetime.combine(target_date, datetime.max.time()).isoformat() + "Z"
+        
+        res = (self.client.table("appointments")
+               .select("id, start_time, status, patient_id, patients(name, phone)")
+               .gte("start_time", start_of_day)
+               .lte("start_time", end_of_day)
+               .neq("status", "cancelled")
+               .order("start_time")
+               .execute())
+        return res.data or []
+
+    def update_appointment_status(self, appointment_id: str, new_status: str):
+        if not self.client: return False
+        try:
+            self.client.table("appointments").update({"status": new_status}).eq("id", appointment_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao atualizar status do agendamento {appointment_id}: {e}")
+            return False
+
+    # ──────────────────── MÉTRICAS (PO) ────────────────────
+
+    def get_monthly_metrics(self):
+        """Busca métricas avançadas baseadas em ajustes.md"""
+        if not self.client: return {}
+        patients = self.client.table("patients").select("insurance, birth_date").execute().data or []
+        appointments = self.client.table("appointments").select("status").execute().data or []
+        return {"patients": patients, "appointments": appointments}
+
+    def get_patient_documents(self, cpf: str):
+        # Placeholder para documentos
+        return []
+
+    def get_patient_by_cpf(self, cpf: str) -> dict | None:
+        if not self.client: return None
+        res = self.client.table("patients").select("*").eq("cpf", cpf).execute()
+        return res.data[0] if res.data else None
+
+    def get_patient_appointments(self, patient_id: str):
+        if not self.client: return []
+        res = (self.client.table("appointments")
+               .select("*")
+               .eq("patient_id", patient_id)
+               .neq("status", "cancelled")
+               .order("start_time")
+               .execute())
+        return res.data or []
+
+    def get_patient_full_history(self, patient_id: str):
+        if not self.client: return []
+        res = (self.client.table("appointments")
+               .select("*")
+               .eq("patient_id", patient_id)
+               .order("start_time", desc=True)
+               .execute())
+        return res.data or []
+
+    def search_patient_flexible(self, query: str):
+        """Busca flexível por CPF, Nome ou E-mail."""
+        if not self.client: return []
+        
+        q = query.strip()
+        # 1. Se for 11 dígitos, tenta CPF primeiro
+        clean_num = "".join(filter(str.isdigit, q))
+        if len(clean_num) == 11:
+            res = self.client.table("patients").select("*").eq("cpf", clean_num).execute()
+            if res.data: return res.data
+
+        # 2. Tenta busca por e-mail (se conter @)
+        if "@" in q:
+            res = self.client.table("patients").select("*").ilike("email", f"%{q}%").execute()
+            if res.data: return res.data
+
+        # 3. Tenta busca por Nome (parcial e insensível a caixa)
+        res = self.client.table("patients").select("*").ilike("name", f"%{q}%").execute()
+        return res.data or []
 
 
 db_service = SupabaseService()

@@ -16,7 +16,7 @@ OFF_TOPIC_KEYWORDS = [
     "futebol", "política", "politica", "bbb", "clima", "tempo", "novela"
 ]
 
-def check_out_of_context(text: str) -> str | None:
+async def check_out_of_context(text: str) -> str | None:
     """
     Retorna o tipo de mensagem fora de contexto: 'offensive', 'off_topic', ou None se estiver ok.
     """
@@ -47,7 +47,8 @@ def check_out_of_context(text: str) -> str | None:
             SystemMessage(content=system_prompt),
             HumanMessage(content=text)
         ]
-        response = llm.invoke(messages)
+        # Usamos ainvoke para não bloquear o loop de eventos
+        response = await llm.ainvoke(messages)
         result = response.content.lower().strip()
         
         if 'offensive' in result:

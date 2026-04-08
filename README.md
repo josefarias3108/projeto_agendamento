@@ -45,10 +45,16 @@ A **Sofia** é uma agente de atendimento conversacional integrada ao WhatsApp vi
 | **Confirmação de Lembrete** | **(Novo)** Lembretes (24h/2h) agora solicitam confirmação (Sim/Não). Negativa cancela automaticamente e sugere reagendamento |
 | **Cancelamento Múltiplo** | Permite ao paciente selecionar e cancelar uma ou mais consultas simultaneamente via menu numerado |
 | **Remarcação** | Cancela a consulta existente e abre novo fluxo de agendamento |
-| **Sincronização Google Calendar** | Worker interno cria/deleta eventos automaticamente a cada 2 minutos sem depender de Realtime/Webhooks |
+| **Painel Administrativo (/consultorio)** | **(Novo)** Camada restrita para secretárias: Agendamentos, Envios em Lote, Cadastros, Busca Flexível, Métricas e Central de Documentos. Agora inclui **Busca Automática de CEP**, **Normalização de Data**, **Padronização de Telefone**, **Seleção de Modalidade (Subcategoria) de Planos** e notificações automáticas para pacientes. |
+| **Busca Flexível (Ficha)** | **(Novo)** Permite buscar pacientes por Nome, CPF ou Data de Nascimento, acessando sua ficha completa e histórico direto no WhatsApp. |
+| **Envio em Lote Inteligente** | **(Novo)** Permite selecionar horários específicos (ou todos) de um dia para disparar mensagens simultâneas via WhatsApp e E-mail. |
+| **Cancelamento Proativo** | **(Novo)** Fluxo para o consultório cancelar consultas em massa com notificação automática ao paciente e convite para reagendamento. |
+| **Sincronização Google Calendar** | Worker interno cria/deleta eventos automaticamente a cada 2 minutos. |
+| **Alertas Administrativos** | **(Novo)** Notificações automáticas para admins sobre cancelamentos e remarcações realizados via consultório. |
+| **Keep-Alive Supabase** | **(Novo)** Job diário para evitar a pausa do banco de dados por inatividade. |
 | **Lembretes Automáticos** | Notifica o paciente 24h e 2h antes da consulta via WhatsApp e E-mail |
 | **Envio de Exames** | Recebe mídias (PDF, imagens) pelo WhatsApp e as armazena |
-| **Gestão de Inatividade** | Sessões inativas por +5 min são encerradas automaticamente |
+| **Gestão de Inatividade** | Sessões inativas por +15 min são encerradas automaticamente |
 | **Classificador de Contexto** | Bloqueia mensagens fora do contexto médico (assuntos não relacionados) e filtra ofensas |
 | **Regra de Ouro** | Após 2 erros consecutivos, o bot escala para atendimento humano |
 

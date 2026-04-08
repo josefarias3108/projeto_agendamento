@@ -111,6 +111,24 @@ async def sync_calendar_job():
         logger.info(f"SyncCalendar ✅ Ciclo completo: +{len(to_create)} criados, -{len(to_delete)} deletados.")
 
 
+async def force_refresh_google_token_job():
+    """
+    Roda a cada 6 horas para forçar a renovação proativa do token do Google.
+    Evita expiração súbita de tokens do tipo Testing na GCP (que morrem em 7 dias silenciadamente
+    se não houver recarga ou verificação proativa frequente).
+    """
+    from src.services.google_calendar import calendar_service
+    from google.auth.transport.requests import Request
+    if calendar_service.creds and calendar_service.creds.refresh_token:
+        try:
+            calendar_service.creds.refresh(Request())
+            calendar_service._save_token()
+            logger.info("CronJob 🔁 Google Calendar: token renovado preventivamente com sucesso.")
+        except Exception as e:
+            logger.error(f"CronJob ❌ Google Calendar: falha ao forçar renovação de token — {e}")
+
+
+
 async def send_reminders_job():
     """
     Roda a cada hora via APScheduler.
@@ -263,3 +281,150 @@ async def check_inactivity_job(active_sessions: dict):
     for jid in to_remove:
         if jid in active_sessions:
             del active_sessions[jid]
+
+# ═══════════════════════════════════════════════════════════════
+#  SERVIÇOS PROATIVOS (15 Minutos, Agendas, Churn)
+# ═══════════════════════════════════════════════════════════════
+
+async def check_proactive_alerts_job():
+    """
+    Verifica pacientes cujo atendimento começa em 15min e que ainda não tem status 'waiting' (Na Espera).
+    Agendado para cada 5 min.
+    """
+    if not db_service.client: return
+    now = datetime.now(timezone.utc)
+    target = now + timedelta(minutes=15)
+    
+    start_window = target - timedelta(minutes=3)
+    end_window = target + timedelta(minutes=3)
+    
+    # Busca pacientes com consulta daqui a 15min que ainda estão scheduled ou confirmed
+    try:
+        res = (db_service.client.table("appointments")
+               .select("id, start_time, status, patients(remote_jid)")
+               .in_("status", ["scheduled", "confirmed"])
+               .gte("start_time", start_window.isoformat())
+               .lte("start_time", end_window.isoformat())
+               .execute())
+               
+        from src.config.messages import MSG_ALERT_15MIN
+        for a in (res.data or []):
+            jid = a.get("patients", {}).get("remote_jid")
+            if jid:
+                await evo_service.send_text_message(jid, MSG_ALERT_15MIN)
+    except Exception as e:
+        logger.error(f"Erro no check_proactive_alerts_job: {e}")
+
+async def churn_check_job():
+    """
+    Prevenção de churn: Envia Whatsapp/Email para pacientes com >60 dias sem consulta.
+    Agendado para rodar a cada 7 dias, ou 1 vez no dia.
+    """
+    if not db_service.client: return
+    # Logica MVP: em produção usaremos query SQL especifica.
+    # Disparará o texto MSG_CHURN_WHATSAPP
+    pass
+
+async def daily_admin_agenda_job():
+    """
+    Envia a lista 12h e 1h antes do primeiro atendimento para o email e admin whatsapp.
+    Agendado para checar a cada hora (ex: 1 vez a cada hora).
+    """
+    if not db_service.client: return
+    now = datetime.now(timezone.utc)
+    target_12h = now + timedelta(hours=12)
+    target_1h = now + timedelta(hours=1)
+    
+    for target, label in [(target_12h, "12h"), (target_1h, "1h")]:
+        start_date = target.replace(hour=0, minute=0, second=0)
+        end_date = target.replace(hour=23, minute=59, second=59)
+        
+        # Pega a primeira consulta do dia do target
+        res = (db_service.client.table("appointments")
+               .select("start_time, patients(name)")
+               .in_("status", ["scheduled", "confirmed"])
+               .gte("start_time", start_date.isoformat())
+               .lte("start_time", end_date.isoformat())
+               .order("start_time")
+               .limit(1)
+               .execute())
+               
+        appointments = res.data or []
+        if appointments:
+            first_appt_time = datetime.fromisoformat(appointments[0]["start_time"].replace("Z", "+00:00"))
+            
+            # Checa se o target está dentro de 1 hora da primeira consulta
+            diff = abs((first_appt_time - target).total_seconds())
+            if diff < 3600:
+                # É hora de enviar o relatório!
+                all_res = (db_service.client.table("appointments")
+                           .select("start_time, patients(name)")
+                           .in_("status", ["scheduled", "confirmed"])
+                           .gte("start_time", start_date.isoformat())
+                           .lte("start_time", end_date.isoformat())
+                           .order("start_time")
+                           .execute())
+                           
+                msg = f"🏥 *Agenda Clínica - Aviso de {label}*\n\nPacientes aguardados:\n"
+                for a in all_res.data:
+                    dt = datetime.fromisoformat(a["start_time"].replace("Z", "+00:00"))
+                    pname = a.get("patients", {}).get("name", "Desconhecido")
+                    msg += f"- {dt.strftime('%H:%M')} | {pname}\n"
+                    
+                # Disparo Whatsapp para Admins
+                admins = db_service.list_admins()
+                for adm in admins:
+                    if adm.get("phone"):
+                        from src.services.evolution import evo_service
+                        import asyncio
+                        asyncio.create_task(evo_service.send_text_message(adm["phone"], msg))
+                        
+                # Disparo Email
+                from src.services.email_service import send_email
+                send_email("gutofarias.32@gmail.com", f"Agenda Médica - Aviso de {label}", msg)
+
+async def supabase_keepalive_job():
+    """
+    Cria um evento oculto (agendamento) e deleta logo após para evitar a inatividade do Supabase.
+    Usa o CPF teste "10809681722" informado.
+    """
+    if not db_service.client: return
+    logger.info("Executando Keep-Alive do Supabase...")
+    
+    try:
+        # 1. Pega paciente
+        p = db_service.get_patient_by_cpf("10809681722")
+        if not p:
+            logger.warning("Supabase Keep-Alive: Paciente teste 10809681722 não encontrado. Job ignorado.")
+            return
+            
+        doc = db_service.get_doctor_by_name("Dr. João")
+        if not doc: return
+        
+        # 2. Agenda para data oculta no futuro distante (ex: daqui 30 dias na madruga)
+        start = datetime.now(timezone.utc) + timedelta(days=30)
+        start = start.replace(hour=3, minute=0, second=0, microsecond=0)
+        end = start + timedelta(hours=1)
+        
+        # Faz insert silencioso
+        res = db_service.client.table("appointments").insert({
+            "patient_id": p["id"],
+            "doctor_id": doc["id"],
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "status": "scheduled",
+            "google_event_id": "KEEPALIVE" # Evita que on sync envie para o Google Agenda
+        }).execute()
+        
+        if res.data:
+            appt_id = res.data[0]["id"]
+            import asyncio
+            # Espera 1 minuto para contar como atividade persistente de IO
+            await asyncio.sleep(60)
+            
+            # Deleta permanentemente para não poluir
+            db_service.client.table("appointments").delete().eq("id", appt_id).execute()
+            logger.info("Supabase Keep-Alive: Sucesso (Insert -> Sleep -> Delete).")
+            
+    except Exception as e:
+        logger.error(f"Erro no Supabase Keep-Alive: {e}")
