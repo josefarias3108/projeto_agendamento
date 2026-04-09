@@ -490,3 +490,9 @@ MSG_SEARCH_PATIENT_PROMPT = "🔎 *Ficha Completa*\n\nPor favor, digite o *CPF, 
 
 MSG_BULK_SELECT_TIMES_PROMPT = "✅ {count} horário(s) selecionado(s) de {name}.\n\nDigite a mensagem para disparar (WhatsApp e Email):"
 
+MSG_CLINIC_CANCELLATION_PROACTIVE_BULK = (
+    "⚠️ Prezado(a), {name}\n"
+    "Informamos que, por motivo de força maior, a consulta agendada com o Dr. João não poderá ser realizada na data de {date}.\n"
+    "Pedimos desculpas pelo inconveniente e nos colocamos à disposição para realizar o agendamento aqui pelo canal de whatsApp."
+)
+

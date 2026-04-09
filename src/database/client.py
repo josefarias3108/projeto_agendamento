@@ -63,9 +63,9 @@ class SupabaseService:
 
     def get_patient_by_cpf(self, cpf: str):
         """Busca por CPF (identificador principal). Aceita '.', '-', etc."""
-        if not self.client:
+        if not self.client or not cpf:
             return None
-        clean_cpf = "".join(filter(str.isdigit, cpf))
+        clean_cpf = "".join(filter(str.isdigit, str(cpf)))
         res = self.client.table("patients").select("*").eq("cpf", clean_cpf).execute()
         return res.data[0] if res.data else None
 
@@ -82,18 +82,18 @@ class SupabaseService:
                        insurance_category: str = None):
         if not self.client:
             return None
-        clean_cpf = "".join(filter(str.isdigit, cpf)) if cpf else None
+        clean_cpf = "".join(filter(str.isdigit, str(cpf))) if cpf else None
         data = {
             "remote_jid": jid,
             "name": name,
             "phone": phone,
-            "email": email.lower().strip() if email else None,
-            "address": address,
-            "cep": cep,
-            "cpf": clean_cpf,
-            "birth_date": birth_date,
-            "insurance": insurance,
-            "insurance_category": insurance_category,
+            "email": email.lower().strip() if email and str(email).strip() else None,
+            "address": address.strip() if address and str(address).strip() else None,
+            "cep": cep.strip() if cep and str(cep).strip() else None,
+            "cpf": clean_cpf if clean_cpf else None,
+            "birth_date": birth_date.strip() if birth_date and str(birth_date).strip() else None,
+            "insurance": insurance.strip() if insurance and str(insurance).strip() else None,
+            "insurance_category": insurance_category.strip() if insurance_category and str(insurance_category).strip() else None,
         }
         res = self.client.table("patients").insert(data).execute()
         return res.data[0] if res.data else None
@@ -584,8 +584,9 @@ class SupabaseService:
         return []
 
     def get_patient_by_cpf(self, cpf: str) -> dict | None:
-        if not self.client: return None
-        res = self.client.table("patients").select("*").eq("cpf", cpf).execute()
+        if not self.client or not cpf: return None
+        clean_cpf = "".join(filter(str.isdigit, str(cpf)))
+        res = self.client.table("patients").select("*").eq("cpf", clean_cpf).execute()
         return res.data[0] if res.data else None
 
     def get_patient_appointments(self, patient_id: str):

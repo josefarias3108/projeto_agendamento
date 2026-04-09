@@ -392,11 +392,12 @@ async def supabase_keepalive_job():
     logger.info("Executando Keep-Alive do Supabase...")
     
     try:
-        # 1. Pega paciente
-        p = db_service.get_patient_by_cpf("10809681722")
-        if not p:
-            logger.warning("Supabase Keep-Alive: Paciente teste 10809681722 não encontrado. Job ignorado.")
+        # 1. Pega 1 paciente qualquer da base (Para não depender de CPF fixo)
+        res_p = db_service.client.table("patients").select("id").limit(1).execute()
+        if not res_p.data:
+            logger.warning("Supabase Keep-Alive: Nenhum paciente na base. Job ignorado.")
             return
+        p = res_p.data[0]
             
         doc = db_service.get_doctor_by_name("Dr. João")
         if not doc: return
@@ -428,3 +429,19 @@ async def supabase_keepalive_job():
             
     except Exception as e:
         logger.error(f"Erro no Supabase Keep-Alive: {e}")
+
+async def daily_ai_audit_job():
+    """
+    Roda 1x ao dia (agendado via main.py) para ler os logs JSONL locais,
+    rodar o prompt LLM do log_analyzer e enviar relatório de Governança para a diretoria por email.
+    """
+    from src.agents.log_analyzer import run_log_analysis
+    try:
+        logger.info("Engatilhando Agente IA de Auditoria Diária...")
+        result = await run_log_analysis()
+        if result:
+            logger.info("Agente IA Auditoria rodou com sucesso.")
+        else:
+            logger.warning("Agente IA Auditoria encontrou problema (ex: falta de chaves).")
+    except Exception as e:
+        logger.error(f"Erro Crítico ao disparar Agente IA Auditoria: {e}")

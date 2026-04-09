@@ -54,8 +54,9 @@ async def handle_metrics(remote_jid: str, state: dict):
     msg += f"🔸 Média de Idade: {average_age} anos\n"
     msg += f"\n🏆 *Ranking Planos de Saúde*\n{rank_str}\n"
     msg += f"\n(Dados baseados no histórico total disponível no formato resumido para WhatsApp).\n"
+    msg += "\n🤖 8️⃣ Forçar Laudo de Inteligência (Email)"
     msg += "\n↩️ 9️⃣ Voltar ao menu do consultório"
     
     await evo_service.send_text_message(remote_jid, msg)
-    state["clinic_step"] = "viewing_report"
+    state["clinic_step"] = "viewing_report_metrics"
 

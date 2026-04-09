@@ -1,36 +1,66 @@
-Ajuste:
- Meus deus ele ainda trava veja se manda a mensagem pro cliente 20 segundos depois.. olha ai o bot congelou, veja abaixo:
+5. Estrutura de logs e auditoria
 
- [18:00, 08/04/2026] Guto 2: Ótimo! Você escolheu Bradesco Saúde 😊
+Aqui eu recomendo separar em 3 níveis.
 
-Agora selecione qual modalidade do plano:
+5.1. Log técnico
 
-1️⃣ Nacional Plus
-2️⃣ Premium
+Para depuração.
 
-👉 Digite o número da opção desejada
-[18:00, 08/04/2026] Guto 2: 2
-[18:00, 08/04/2026] Guto 2: 🎉 Cadastro efetuado com sucesso!
-Voltando ao menu principal.
-[18:00, 08/04/2026] Guto 2: 🏥 Menu do Consultório (Uso Restrito)
+Campos:
 
-1️⃣ Agendamentos/Lista de espera do dia
-2️⃣ Envios whatsApp/e-mail
-3️⃣ Efetuar novos Cadastros/Atualizar
-4️⃣ Busca de Pacientes
-5️⃣ Pesquisa de exames
-6️⃣ Métricas e Resultados
+request_id
+session_id
+phone
+handler
+action
+status
+error_message
+duration_ms
+created_at
 
-7️⃣ Encerrar atendimento
+Exemplo:
 
-👉 Digite o número correspondente:
-[18:00, 08/04/2026] Guto 2: ✅ Olá, José Augusto Palermo de farias! Seu cadastro foi realizado com sucesso em nosso consultório. Ficamos à disposição! 😊
-[18:00, 08/04/2026] Guto 2: Desculpe, ocorreu um erro interno no sistema administrativo. Voltando ao menu principal.
-[18:00, 08/04/2026] Guto 2: 🏥 Menu do Consultório (Uso Restrito)
+webhook recebido
+mensagem enviada
+falha no Supabase
+falha na Evolution
+falha na Calendar API
+5.2. Log conversacional
 
-1️⃣ Agendamentos/Lista de espera do dia
-2️⃣ Envios whatsApp/e-mail
-3️⃣ Efetuar novos Cadastros/Atualizar
-4️⃣ Busca de Pacientes
-5️⃣ Pesquisa de exames
-6️⃣ Métricas e Resultados
+Para entender o comportamento do usuário.
+
+Campos:
+
+session_id
+patient_id
+role
+current_state
+detected_intent
+user_message
+bot_message
+classification
+fallback_used
+created_at
+5.3. Log de auditoria
+
+Para ações sensíveis de secretária, médico e admin.
+
+Campos:
+
+actor_type
+actor_id
+actor_phone
+target_entity
+target_id
+action_type
+old_value
+new_value
+justification
+created_at
+
+Exemplos:
+
+secretária cancelou consulta
+médico marcou atendimento concluído
+admin autorizou novo número
+secretária enviou disparo em massa

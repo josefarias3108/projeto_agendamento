@@ -110,11 +110,35 @@ async def handle_clinic(remote_jid: str, state: dict, text: str):
         elif text == "4":
             from src.handlers.clinic_scheduling import start_clinic_cancellation
             await start_clinic_cancellation(remote_jid, state)
+        elif text == "5":
+            from src.handlers.clinic_scheduling import start_clinic_cancellation_consultorio
+            await start_clinic_cancellation_consultorio(remote_jid, state)
         elif text == "9":
             state["clinic_step"] = "menu"
             await send(remote_jid, MSG_CLINIC_MENU)
         else:
             await send(remote_jid, MSG_CLINIC_MENU_AGENDA)
+
+    elif step == "viewing_report":
+        if text == "9" or txt_lower in ("voltar", "v"):
+            state["clinic_step"] = "menu"
+            await send(remote_jid, MSG_CLINIC_MENU)
+        else:
+            await send(remote_jid, "Opção inválida. Digite 9️⃣ para voltar.")
+
+    elif step == "viewing_report_metrics":
+        if text == "8":
+            await send(remote_jid, "🤖 Iniciando varredura analítica. A IA fará a compactação dos logs e seu diagnóstico isolado logo chegará ao email da diretoria! Voltando...")
+            import asyncio
+            from src.services.jobs import daily_ai_audit_job
+            asyncio.create_task(daily_ai_audit_job())
+            state["clinic_step"] = "menu"
+            await send(remote_jid, MSG_CLINIC_MENU)
+        elif text == "9" or txt_lower in ("voltar", "v"):
+            state["clinic_step"] = "menu"
+            await send(remote_jid, MSG_CLINIC_MENU)
+        else:
+            await send(remote_jid, "Opção inválida. Digite 8️⃣ ou 9️⃣.")
 
     # ========== SUBMENU 2: ENVIOS ==========
     elif step == "menu_envios":
@@ -530,9 +554,11 @@ async def handle_clinic(remote_jid: str, state: dict, text: str):
             await send(remote_jid, "CPF inválido. Envie 11 números ou 9️⃣ Voltar.")
 
     elif step == "viewing_report_busca":
-         if text in ("9", "voltar"):
+         if text == "9" or txt_lower in ("voltar", "v"):
              state["clinic_step"] = "menu_busca"
              await send(remote_jid, MSG_CLINIC_MENU_BUSCA)
+         else:
+             await send(remote_jid, "Opção inválida. Digite 9️⃣ para voltar.")
 
     elif step == "search_docs":
         if text == "9" or txt_lower == "voltar":

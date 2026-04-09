@@ -39,8 +39,9 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from src.services.jobs import check_inactivity_job, check_proactive_alerts_job, daily_admin_agenda_job, supabase_keepalive_job, force_refresh_google_token_job
+    from src.services.jobs import check_inactivity_job, check_proactive_alerts_job, daily_admin_agenda_job, supabase_keepalive_job, force_refresh_google_token_job, daily_ai_audit_job
     scheduler.add_job(send_reminders_job, "interval", minutes=60)
+    scheduler.add_job(daily_ai_audit_job, "cron", hour=20, minute=0, id="ai_audit_job")
     scheduler.add_job(check_inactivity_job, "interval", seconds=30, args=[active_sessions])
     scheduler.add_job(sync_calendar_job, "interval", minutes=2, id="google_calendar_sync")
     scheduler.add_job(check_proactive_alerts_job, "interval", minutes=5)
@@ -179,6 +180,8 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
             await handle_clinic(remote_jid, state, text)
         except Exception as e:
             logger.error(f"Erro crítico em handle_clinic: {e}", exc_info=True)
+            from src.services.logger_service import log_technical
+            asyncio.create_task(log_technical("handle_clinic", "error", handler=state.get("clinic_step", "unknown"), phone=remote_jid, session_id=remote_jid, error_message=str(e)))
             await send(remote_jid, "Desculpe, ocorreu um erro interno no sistema administrativo. Voltando ao menu principal.")
             state.pop("clinic_step", None)
             from src.config.messages import MSG_CLINIC_MENU
@@ -318,6 +321,17 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
     if len(text) > 3 and step not in ["waiting_for_exams", "scheduling"] and not step.startswith("register_"):
         context_status = await check_out_of_context(text)
         if context_status:
+            from src.services.logger_service import log_conversational
+            asyncio.create_task(log_conversational(
+                patient_id=str(state.get("id", "")),
+                role="patient",
+                current_state=step,
+                detected_intent=context_status,
+                user_message=text,
+                bot_message="[SYSTEM OUT OF CONTEXT WARNING]",
+                classification=context_status,
+                session_id=remote_jid
+            ))
             from src.config.messages import (MSG_OUT_OF_CONTEXT_OFFENSIVE, MSG_OUT_OF_CONTEXT_DEFAULT)
             state["conversation_step"] = "waiting_out_of_context_response"
             
@@ -351,6 +365,8 @@ async def process_message(remote_jid: str, text: str, message_data: dict = None)
 
     except Exception as e:
         logger.error(f"Erro crítico no process_message de {remote_jid}: {e}", exc_info=True)
+        from src.services.logger_service import log_technical
+        asyncio.create_task(log_technical("process_message", "error", handler=step, phone=remote_jid, session_id=remote_jid, error_message=str(e)))
         # Regra de Ouro: Escalonamento após erros
         state["loop_count"] = state.get("loop_count", 0) + 1
         if state["loop_count"] >= 2:

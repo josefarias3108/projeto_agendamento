@@ -196,6 +196,8 @@ async def handle_clinic_scheduling(remote_jid, state, text):
                         # AJUSTE: Sincronização com o banco de dados
                         db_service.cancel_appointment(appt_id)
                         cancelled_count += 1
+                        from src.services.logger_service import log_audit
+                        asyncio.create_task(log_audit("secretaria", "cancel_appointment", "appointment", remote_jid, target_id=str(appt_id)))
                     
                     # Identificar o paciente para notificação
                     target_pid = a.get("patient_id")
@@ -286,6 +288,8 @@ async def handle_clinic_scheduling(remote_jid, state, text):
         if 0 <= idx < len(options):
             target = options[idx]
             db_service.cancel_appointment(target["id"])
+            from src.services.logger_service import log_audit
+            asyncio.create_task(log_audit("secretaria", "reschedule_appointment", "appointment", remote_jid, target_id=str(target["id"])))
             
             # NOVO: Notificar o paciente que a consulta antiga foi cancelada visando a remarcação
             p = state.get("clinic_target_patient")
@@ -322,43 +326,54 @@ async def handle_clinic_scheduling(remote_jid, state, text):
             from src.config.messages import MSG_CLINIC_MENU
             await send(remote_jid, MSG_CLINIC_MENU)
             return
-        else:
-            await send(remote_jid, "🤔 Não consegui identificar sua validação. Digite *1* para Confirmar ou *2* para Voltar.")
+        
+        # Opção 8: Ver mais datas
+        if text == "8":
+            from src.handlers.clinic import format_and_send_date_pagination
+            offset = state.get("clinic_date_offset", 0) + 7
+            await format_and_send_date_pagination(remote_jid, state, "scheduling_bulk_cancel_select_date", offset)
             return
 
-# ----------------- FLUXOS DE AGENDAMENTO (CRIAR E REMARCAR) -----------------    
         date_map = state.get("clinic_date_map", {})
         if text in date_map:
             selected_date = date_map[text]
             state["selected_bulk_cancel_date"] = selected_date
             
-            # Busca horários ocupados
-            appts = db_service.get_appointments_by_date(datetime.strptime(selected_date, "%Y-%m-%d").date())
+            # Busca horários ocupados para a data selecionada
+            try:
+                dt_obj_date = datetime.fromisoformat(selected_date).date()
+            except:
+                dt_obj_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
+                
+            appts = db_service.get_appointments_by_date(dt_obj_date)
             if not appts:
                 await send(remote_jid, "Não há consultas agendadas para este dia.\n↩️ 9️⃣ Voltar.")
                 return
                 
-            msg = "Escolha os horários/pacientes que serão cancelados:\n\n"
+            msg = "Veja os horários disponíveis para o dia escolhido:\n\n"
             cancel_time_map = {}
             for i, a in enumerate(appts):
                 idx = i + 1
-                h_str = datetime.fromisoformat(a["start_time"].replace("Z", "+00:00")).strftime("%H:%M")
-                p_name = a.get("patients", {}).get("name", "Desconhecido")
+                try:
+                    h_str = datetime.fromisoformat(a["start_time"].replace("Z", "+00:00")).strftime("%H:%M")
+                except: h_str = "??"
+                p_name = (a.get("patients") or {}).get("name", "Desconhecido")
                 msg += f"{idx}️⃣ {h_str} - {p_name}\n"
                 cancel_time_map[str(idx)] = a
             
             msg += f"\n{len(appts)+1}️⃣ *Todos os horários*\n"
-            msg += "\n↩️ 9️⃣ Voltar"
-            msg += "\n\n👉 Digite os números (ex: 1,2) ou a opção para 'Todos':"
+            msg += "\n↩️ 7️⃣ Voltar para escolher outra data"
+            msg += "\n\n👉 Me diga o número ou os números (separados por vírgula) das opções:"
             
             state["clinic_bulk_cancel_time_map"] = cancel_time_map
             state["clinic_step"] = "scheduling_bulk_cancel_select_times"
             await send(remote_jid, msg)
         else:
-            await send(remote_jid, "Opção inválida.")
+            await send(remote_jid, "Opção inválida. Escolha um número da lista ou 9️⃣ Voltar.")
+        return
 
     elif step == "scheduling_bulk_cancel_select_times":
-        if text == "9" or txt_lower == "voltar":
+        if text == "7" or txt_lower == "voltar":
             await start_clinic_cancellation_consultorio(remote_jid, state)
             return
             
@@ -379,8 +394,10 @@ async def handle_clinic_scheduling(remote_jid, state, text):
             
             lines = []
             for a in selected_appts:
-                h_str = datetime.fromisoformat(a["start_time"].replace("Z", "+00:00")).strftime("%H:%M")
-                p_name = a.get("patients", {}).get("name", "Desconhecido")
+                try:
+                    h_str = datetime.fromisoformat(a["start_time"].replace("Z", "+00:00")).strftime("%H:%M")
+                except: h_str = "??"
+                p_name = (a.get("patients") or {}).get("name", "Desconhecido")
                 lines.append(f"• {h_str} - {p_name}")
                 
             msg = f"⚠️ *Confirmar Cancelamento em Massa*\n\nVocê selecionou {len(selected_appts)} consulta(s):\n"
@@ -400,40 +417,38 @@ async def handle_clinic_scheduling(remote_jid, state, text):
                 try:
                     # 1. Cancelar no Banco
                     db_service.cancel_appointment(a["id"])
+                    from src.services.logger_service import log_audit
+                    asyncio.create_task(log_audit("secretaria", "bulk_cancel", "appointment", remote_jid, target_id=str(a["id"])))
+                    
+                    # 2. Enviar mensagem proativa para o paciente
+                    p = a.get("patients") or {}
+                    if p.get("phone"):
+                        try:
+                            d_obj = datetime.fromisoformat(a["start_time"].replace("Z", "+00:00"))
+                            d_str = d_obj.strftime("%d/%m/%Y")
+                            
+                            # MENSAGEM PERSONALIZADA CONFORME SOLICITADO
+                            notification = MSG_CLINIC_CANCELLATION_PROACTIVE_BULK.format(
+                                name=p.get("name", "Paciente"),
+                                date=d_str
+                            )
+                            asyncio.create_task(evo_service.send_text_message(p["phone"], notification))
+                            
+                            # Notificar Admin
+                            asyncio.create_task(notify_admins_event("❌ Cancelamento via Consultório (Em massa)", p, a["start_time"]))
+                        except: pass
+                    count += 1
+                    await asyncio.sleep(0.5)
                 except Exception as e:
-                    logger.error(f"Erro cancelando no banco: {e}")
-                
-                # 2. Enviar mensagem proativa para o paciente
-                p = a.get("patients", {})
-                if p.get("phone"):
-                    try:
-                        d_obj = datetime.fromisoformat(a["start_time"].replace("Z", "+00:00"))
-                        d_str = d_obj.strftime("%d/%m/%Y")
-                        h_str = d_obj.strftime("%H:%M")
-                        
-                        notification = MSG_CLINIC_CANCELLATION_PROACTIVE.format(
-                            name=p.get("name", "Paciente"),
-                            date=d_str,
-                            hour=h_str
-                        )
-                        asyncio.create_task(evo_service.send_text_message(p["phone"], notification))
-                        
-                        # NOVO: Configura o estado do paciente para receber a resposta (1 ou 2)
-                        p_jid = p.get("remote_jid") or f"{p['phone']}@s.whatsapp.net"
-                        p_state = active_sessions.get(p_jid) or create_initial_state(p_jid, p)
-                        p_state["conversation_step"] = "waiting_proactive_cancel_response"
-                        active_sessions[p_jid] = p_state
-                    except: pass
-                
-                # 3. Notificar Admin (regra existente)
-                asyncio.create_task(notify_admins_event("❌ Cancelamento via Consultório (Em massa)", p, a["start_time"]))
-                count += 1
-                await asyncio.sleep(0.5)
+                    logger.error(f"Erro no loop de cancelamento em massa: {e}")
 
             await send(remote_jid, "OK. cancelamento feito ✅")
-            state["clinic_step"] = "menu"
-            from src.config.messages import MSG_CLINIC_MENU
-            await send(remote_jid, MSG_CLINIC_MENU)
+            from src.config.messages import MSG_ENCERRAR
+            await send(remote_jid, MSG_ENCERRAR)
+            from src.services.sessions import active_sessions
+            if remote_jid in active_sessions:
+                del active_sessions[remote_jid]
+            return
         else:
             await start_clinic_cancellation_consultorio(remote_jid, state)
 
@@ -586,7 +601,8 @@ async def notify_admins_event(motivo, patient, start_time_iso):
     except:
         dt_str = str(start_time_iso)
         
-    pname = patient.get("name", "Desconhecido")
+    p = patient or {}
+    pname = p.get("name", "Desconhecido")
     msg = f"⚠️ *Aviso Importante do Sistema* ⚠️\n\n{motivo}\n\n👤 Paciente: {pname}\n⌚ Horário Afetado: {dt_str}\n\nAção realizada pelo uso restrito (/consultorio)."
 
     # Envia WhatsApp para admins

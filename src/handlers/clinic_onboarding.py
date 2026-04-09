@@ -97,6 +97,7 @@ async def handle_clinic_onboarding(remote_jid, state, text):
         
     if step == "onboarding_ask_birth":
         if text.strip() == "1":
+            state["clinic_register_data"]["birth_date"] = None
             state["clinic_step"] = "onboarding_ask_cep"
             await send(remote_jid, "Qual é o *CEP*?\n\n👉 *Digite 1 para pular essa etapa.*")
             return
@@ -120,6 +121,8 @@ async def handle_clinic_onboarding(remote_jid, state, text):
 
     if step == "onboarding_ask_cep":
         if text.strip() == "1":
+            state["clinic_register_data"]["cep"] = None
+            state["clinic_register_data"]["cep_address_base"] = None
             state["clinic_step"] = "onboarding_ask_email"
             await send(remote_jid, "Qual é o *E-mail*?\n\n👉 *Digite 1 para pular essa etapa.*")
             return
@@ -170,6 +173,9 @@ async def handle_clinic_onboarding(remote_jid, state, text):
     if step == "onboarding_ask_email":
         if text.strip() != "1":
             state["clinic_register_data"]["email"] = text.strip()
+        else:
+            state["clinic_register_data"]["email"] = None
+            
             
         state["clinic_step"] = "onboarding_ask_insurance"
         msg = MSG_ASK_INSURANCE_MENU.replace("↩️ 11️⃣ Voltar\n", "👉 *Digite 0 para pular*\n")
@@ -182,7 +188,7 @@ async def handle_clinic_onboarding(remote_jid, state, text):
         if match:
             idx = int(match.group())
             if idx == 0:
-                insurance = "Particular"
+                insurance = None
             elif idx == 1: insurance = "Amil"
             elif idx == 2: insurance = "Assim Saúde"
             elif idx == 3: insurance = "Bradesco Saúde"
@@ -210,7 +216,11 @@ async def handle_clinic_onboarding(remote_jid, state, text):
                     await send(remote_jid, f"Ótimo! Você escolheu *{insurance}* 😊\n\nAgora selecione qual *modalidade* do plano:\n\n" + "\n".join(lines) + "\n\n👉 Digite o número da opção desejada")
                     return
             
-            # Se for particular ou não tiver subcategorias, finaliza
+            # Se for particular/nulo ou não tiver subcategorias, finaliza
+            await _finish_clinic_registration(remote_jid, state)
+            return
+        elif match and idx == 0:
+            state["clinic_register_data"]["insurance"] = None
             await _finish_clinic_registration(remote_jid, state)
             return
 
@@ -271,11 +281,31 @@ async def handle_clinic_onboarding(remote_jid, state, text):
         if not is_ok:
              # Atualizar!
              db_val = text.strip()
-             if current_field_key == "remote_jid":
-                 clean_phone = "".join(filter(str.isdigit, db_val))
-                 db_val = f"{clean_phone}@s.whatsapp.net"
+             
+             if current_field_key == "birth_date":
+                 clean_date = "".join(filter(str.isdigit, db_val))
+                 if len(clean_date) == 8:
+                     db_val = f"{clean_date[4:]}-{clean_date[2:4]}-{clean_date[:2]}"
+                 else:
+                     await send(remote_jid, "⚠️ Formato de data inválido. Digite no formato DD/MM/AAAA (ex: 31/08/1984).")
+                     return
+                     
+             elif current_field_key == "cep":
+                 db_val = "".join(filter(str.isdigit, db_val))
                  
-             if current_field_key == "insurance":
+             elif current_field_key == "remote_jid":
+                 clean_phone = "".join(filter(str.isdigit, db_val))
+                 if clean_phone:
+                     if len(clean_phone) in (10, 11) and not clean_phone.startswith("55"):
+                         clean_phone = f"55{clean_phone}"
+                     db_val = f"{clean_phone}@s.whatsapp.net"
+                     try:
+                         db_service.update_patient(p["id"], {"phone": clean_phone})
+                     except: pass
+                 else:
+                     db_val = None
+                 
+             elif current_field_key == "insurance":
                  match = re.search(r'\d+', text)
                  if match:
                      i_idx = int(match.group())
@@ -293,7 +323,11 @@ async def handle_clinic_onboarding(remote_jid, state, text):
                  else:
                      db_val = "Particular"
 
+             old_val = str(p.get(current_field_key, ""))
              db_service.update_patient(p["id"], {current_field_key: db_val})
+             from src.services.logger_service import log_audit
+             import asyncio
+             asyncio.create_task(log_audit("secretaria", f"update_patient_{current_field_key}", "patient", remote_jid, target_id=str(p["id"]), old_value=old_val, new_value=str(db_val)))
              # update state too
              state["clinic_update_patient"][current_field_key] = db_val
              
