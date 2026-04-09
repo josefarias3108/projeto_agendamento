@@ -49,6 +49,8 @@ A **Sofia** é uma agente de atendimento conversacional integrada ao WhatsApp vi
 | **Busca Flexível (Ficha)** | **(Novo)** Permite buscar pacientes por Nome, CPF ou Data de Nascimento, acessando sua ficha completa e histórico direto no WhatsApp. |
 | **Envio em Lote Inteligente** | **(Novo)** Permite selecionar horários específicos (ou todos) de um dia para disparar mensagens simultâneas via WhatsApp e E-mail. |
 | **Cancelamento Proativo** | **(Novo)** Fluxo para o consultório cancelar consultas em massa com notificação personalizada ao paciente e convite para reagendamento. Permite seleção múltipla de horários em uma data específica. |
+| **Governança IA (Auditoria)** | **(Novo)** Agente `log_analyzer.py` que gera relatórios diários de erros e ações sensíveis enviando para o e-mail da diretoria. |
+| **Hospedagem 24/7 (VPS)** | **(Novo)** Deploy em servidor Linux (Contabo) usando `screen` e persistência na nuvem, garantindo operação contínua sem depender de PC local. |
 | **Sincronização Google Calendar** | Worker interno cria/deleta eventos automaticamente a cada 2 minutos. |
 | **Alertas Administrativos** | **(Novo)** Notificações automáticas para admins sobre cancelamentos e remarcações realizados via consultório. |
 | **Keep-Alive Supabase** | **(Novo)** Job diário para evitar a pausa do banco de dados por inatividade. |
