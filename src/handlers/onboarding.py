@@ -8,6 +8,17 @@ logger = logging.getLogger("CardioAgent")
 async def send(remote_jid, text):
     await evo_service.send_text_message(remote_jid, text)
 
+def validate_cpf(cpf: str) -> bool:
+    cpf = "".join(filter(str.isdigit, cpf))
+    if len(cpf) != 11 or cpf == cpf[0] * 11:
+        return False
+    for i in range(9, 11):
+        value = sum((int(cpf[num]) * ((i + 1) - num) for num in range(0, i)))
+        digit = ((value * 10) % 11) % 10
+        if digit != int(cpf[i]):
+            return False
+    return True
+
 async def handle_onboarding(remote_jid, state, text):
     step = state["conversation_step"]
     txt_lower = text.lower().strip()
@@ -59,14 +70,11 @@ async def handle_onboarding(remote_jid, state, text):
     # ETAPA: ask_cpf_existing
     # ══════════════════════════════════════════════════════════
     elif step == "ask_cpf_existing":
-        from validate_docbr import CPF
-        cpf_validator = CPF()
-        
         # Limpa o CPF para a busca
         clean_cpf = "".join(filter(str.isdigit, text))
         
-        # 1. Validação Matemática Rigorosa
-        if clean_cpf and not cpf_validator.validate(clean_cpf):
+        # 1. Validação Matemática Rigorosa nativa
+        if clean_cpf and not validate_cpf(clean_cpf):
             await send(remote_jid, "❌ Esse CPF é inválido. Por favor, digite os 11 números do seu CPF corretamente:")
             return
 
@@ -150,14 +158,11 @@ async def handle_onboarding(remote_jid, state, text):
                 await send(remote_jid, "🤔 Por favor, responda com *1* (Sim) para confirmar ou *2* (Não).")
 
     elif step == "register_cpf":
-        from validate_docbr import CPF
-        cpf_validator = CPF()
-        
         # Limpa o CPF para salvar apenas números
         clean_cpf = "".join(filter(str.isdigit, text))
         
-        # 1. Validação Matemática
-        if not cpf_validator.validate(clean_cpf):
+        # 1. Validação Matemática nativa
+        if not validate_cpf(clean_cpf):
             await send(remote_jid, "❌ Esse CPF é inválido. Por favor, digite os 11 números do seu CPF corretamente:")
             return
 
