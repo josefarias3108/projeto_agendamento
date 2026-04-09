@@ -10,11 +10,11 @@ import time
 def deploy_automation():
     # --- 1. CONFIGURAÇÕES DO PROJETO ---
     config = {
-        "host": "194.147.58.150",
-        "user": "guto",
-        "pass": "Aurora@22",
+        "host": os.getenv("VPS_HOST", "YOUR_VPS_IP_HERE"),
+        "user": os.getenv("VPS_USER", "YOUR_VPS_USER_HERE"),
+        "pass": os.getenv("VPS_PASS", "YOUR_VPS_PASS_HERE"),
         "repo": "https://github.com/josefarias3108/projeto_agendamento.git", # Mude para o repositório correto
-        "target_dir": "/home/guto/projeto_agendamento",                     # Caminho na VPS
+        "target_dir": f"/home/{os.getenv('VPS_USER', 'guto')}/projeto_agendamento", # Caminho na VPS
         "port": "8000"                                                      # Porta do Uvicorn
     }
 
